@@ -1,0 +1,40 @@
+@startuml saga-happy-path
+title Saga оформления заказа — успешный сценарий
+
+actor Покупатель as customer
+participant "Сервис заказов" as order
+participant "Сервис склада" as inventory
+participant "Сервис платежей" as payment
+participant "Сервис доставки" as delivery
+participant "Сервис уведомлений" as notification
+
+customer -> order: Оформить заказ
+activate order
+order -> order: создать заказ ""New""
+
+order ->> inventory: **OrderCreated**
+inventory -> inventory: зарезервировать товар
+inventory ->> order: **StockReserved**
+order -> order: статус ""AwaitingPayment""
+
+order ->> payment: **OrderAwaitingPayment**
+payment -> payment: провести оплату
+payment ->> order: **PaymentSucceeded**
+order -> order: статус ""Paid""
+
+order ->> delivery: **OrderPaid**
+order ->> notification: **OrderStatusChanged**
+notification -> customer: "Заказ оплачен"
+
+delivery -> delivery: создать заявку на доставку
+delivery ->> order: **ShipmentCreated**
+
+...доставка едет к покупателю...
+
+delivery ->> order: **ShipmentDelivered**
+order -> order: статус ""Completed""
+order ->> notification: **OrderStatusChanged**
+notification -> customer: "Заказ доставлен"
+deactivate order
+
+@enduml
