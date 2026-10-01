@@ -8,44 +8,44 @@ AddRelTag("event", $lineColor="#d9480f", $textColor="#d9480f", $lineStyle="Dashe
 AddRelTag("sync", $lineColor="#495057", $textColor="#495057", $legendText="синхронный вызов (REST/HTTPS)")
 
 ' === Пользователи ===
-Person(customer, "Покупатель", "Просматривает каталог, оформляет и оплачивает заказы, отслеживает их статус")
-Person(seller, "Продавец", "Размещает товары, управляет остатками, получает уведомления о заказах и видит их статус")
+Person(customer, "Покупатель", "Выбирает товары и оформляет заказы")
+Person(seller, "Продавец", "Управляет товарами и заказами")
 
 ' === Внешние системы ===
-System_Ext(payment_gateway, "Платёжный шлюз", "Проводит оплату картой, хранит токены привязанных карт")
-System_Ext(logistics, "Логистический провайдер", "Принимает заявки на доставку, выдаёт трек-номер, сообщает статус доставки")
-System_Ext(push_provider, "Push/Email-провайдер", "FCM/APNs, email-рассылка")
+System_Ext(payment_gateway, "Платёжный шлюз", "Проводит оплату картой")
+System_Ext(logistics, "Логистический провайдер", "Доставляет заказы")
+System_Ext(push_provider, "Push/Email-провайдер", "Рассылает уведомления")
 
 System_Boundary(novamarket, "NovaMarket") {
 
-    Container(mobile_app, "Мобильное приложение", "iOS/Android", "Клиентский канал покупателя (MVP)")
-    Container(seller_app, "Кабинет продавца", "Web SPA", "Управление товарами, остатками и заказами продавца")
-    Container(gateway, "API Gateway", "NGINX", "Единая точка входа: маршрутизация, TLS, проверка JWT, rate limiting")
+    Container(mobile_app, "Мобильное приложение", "iOS/Android", "Клиентский канал покупателя")
+    Container(seller_app, "Кабинет продавца", "Web SPA", "Клиентский канал продавца")
+    Container(gateway, "API Gateway", "NGINX", "Единая точка входа, маршрутизация запросов")
 
-    Container(auth_service, "Сервис пользователей", "Go", "Регистрация и аутентификация, выдача JWT, профили и адреса покупателей и продавцов")
+    Container(auth_service, "Сервис пользователей", "Go", "Аутентификация и профили")
 
     Boundary(selection, "Выбор товара") {
-        Container(catalog, "Сервис каталога", "Go", "Товары, категории, цены, фото, поиск и фильтрация. Хранит денормализованную витрину с наличием и рейтингом")
-        ContainerDb(catalog_db, "БД каталога", "PostgreSQL + Redis-кэш", "Карточки товаров, витрина для быстрого чтения")
-        Container(review, "Сервис отзывов", "Go", "Отзывы и рейтинги товаров")
-        Container(cart, "Сервис корзины", "Go", "Корзина покупателя до оформления заказа")
+        Container(catalog, "Сервис каталога", "Go", "Товары, поиск и наличие")
+        ContainerDb(catalog_db, "БД каталога", "PostgreSQL + Redis-кэш", "Карточки товаров и витрина")
+        Container(review, "Сервис отзывов", "Go", "Отзывы и рейтинги")
+        Container(cart, "Сервис корзины", "Go", "Корзина покупателя")
         ContainerDb(cart_db, "БД корзины", "Redis", "Содержимое корзин")
     }
 
     Boundary(ordering, "Оформление и исполнение заказа") {
-        Container(order, "Сервис заказов", "Go", "Создание заказа, владелец его жизненного цикла и статуса. Координирует сагу оформления, отдаёт историю и статусы покупателю и продавцу")
-        ContainerDb(order_db, "БД заказов", "PostgreSQL", "Заказы, история статусов, outbox")
-        Container(inventory, "Сервис склада", "Go", "Остатки товаров, резервирование, подтверждение и снятие резерва")
+        Container(order, "Сервис заказов", "Go", "Жизненный цикл заказа, координирует сагу")
+        ContainerDb(order_db, "БД заказов", "PostgreSQL", "Заказы и статусы")
+        Container(inventory, "Сервис склада", "Go", "Остатки и резервирование товаров")
         ContainerDb(inventory_db, "БД склада", "PostgreSQL", "Остатки и резервы")
-        Container(payment, "Сервис платежей", "Go", "Платёжные сессии, автосписание по привязанной карте, возвраты")
-        ContainerDb(payment_db, "БД платежей", "PostgreSQL", "Платежи, токены привязанных карт")
-        Container(delivery, "Сервис доставки", "Go", "Заявки на доставку, трек-номера, статусы доставки от провайдера")
+        Container(payment, "Сервис платежей", "Go", "Оплата и возвраты")
+        ContainerDb(payment_db, "БД платежей", "PostgreSQL", "Платежи и токены карт")
+        Container(delivery, "Сервис доставки", "Go", "Заявки и статусы доставки")
         ContainerDb(delivery_db, "БД доставки", "PostgreSQL", "Заявки и статусы доставки")
     }
 
-    Container(notification, "Сервис уведомлений", "Go", "Push и email покупателям и продавцам при смене статуса заказа")
+    Container(notification, "Сервис уведомлений", "Go", "Push и email о статусе заказа")
 
-    ContainerQueue(broker, "Брокер событий", "Apache Kafka", "Шина событий: топики product-, review-, stock-, order-, payment-, delivery-events. Все асинхронные связи на схеме идут через неё")
+    ContainerQueue(broker, "Брокер событий", "Apache Kafka", "Шина асинхронных событий между сервисами")
 }
 
 ' === Синхронные взаимодействия ===
@@ -54,13 +54,13 @@ Rel(seller, seller_app, "Использует")
 Rel(mobile_app, gateway, "API-запросы", "HTTPS/JSON", $tags="sync")
 Rel(seller_app, gateway, "API-запросы", "HTTPS/JSON", $tags="sync")
 
-Rel(gateway, auth_service, "Вход, проверка токенов", "REST", $tags="sync")
-Rel(gateway, catalog, "Каталог, карточка товара, управление товарами", "REST", $tags="sync")
+Rel(gateway, auth_service, "Аутентификация", "REST", $tags="sync")
+Rel(gateway, catalog, "Каталог", "REST", $tags="sync")
 Rel(gateway, review, "Отзывы", "REST", $tags="sync")
-Rel(gateway, cart, "Изменение корзины", "REST", $tags="sync")
-Rel(gateway, order, "Оформление, история и статусы заказов", "REST", $tags="sync")
-Rel(gateway, inventory, "Управление остатками (продавец)", "REST", $tags="sync")
-Rel(gateway, payment, "Платёжная страница, привязка карты", "REST", $tags="sync")
+Rel(gateway, cart, "Корзина", "REST", $tags="sync")
+Rel(gateway, order, "Заказы", "REST", $tags="sync")
+Rel(gateway, inventory, "Остатки", "REST", $tags="sync")
+Rel(gateway, payment, "Оплата", "REST", $tags="sync")
 
 Rel(catalog, catalog_db, "Читает/пишет")
 Rel(cart, cart_db, "Читает/пишет")
@@ -69,30 +69,30 @@ Rel(inventory, inventory_db, "Читает/пишет")
 Rel(payment, payment_db, "Читает/пишет")
 Rel(delivery, delivery_db, "Читает/пишет")
 
-Rel(payment, payment_gateway, "Создаёт платёж, списывает по токену, возврат", "HTTPS", $tags="sync")
+Rel(payment, payment_gateway, "Оплата", "HTTPS", $tags="sync")
 Rel(payment_gateway, payment, "Результат оплаты", "Webhook", $tags="sync")
-Rel(delivery, logistics, "Создаёт заявку на доставку", "HTTPS", $tags="sync")
-Rel(logistics, delivery, "Трек-номер, статусы доставки", "Webhook", $tags="sync")
-Rel(notification, push_provider, "Отправляет уведомления", "HTTPS", $tags="sync")
+Rel(delivery, logistics, "Заявка на доставку", "HTTPS", $tags="sync")
+Rel(logistics, delivery, "Статус доставки", "Webhook", $tags="sync")
+Rel(notification, push_provider, "Уведомление", "HTTPS", $tags="sync")
 
 ' === События (Kafka) ===
 ' Для наглядности стрелки идут от издателя к подписчику напрямую,
 ' физически все события публикуются в топики брокера (broker).
 
 ' Каталог и витрина
-Rel(catalog, cart, "ProductPriceChanged, ProductUnpublished", $tags="event")
-Rel(inventory, catalog, "StockLevelChanged", $tags="event")
-Rel(review, catalog, "ReviewPublished", $tags="event")
+Rel(catalog, cart, "Товар изменён/снят", $tags="event")
+Rel(inventory, catalog, "Остаток изменён", $tags="event")
+Rel(review, catalog, "Новый отзыв", $tags="event")
 
 ' Сага оформления заказа
-Rel(order, cart, "OrderCreated", $tags="event")
-Rel(order, inventory, "OrderCreated, OrderPaid, OrderCancelled", $tags="event")
-Rel(inventory, order, "StockReserved, StockReservationFailed", $tags="event")
-Rel(order, payment, "OrderAwaitingPayment, OrderCancelled", $tags="event")
-Rel(payment, order, "PaymentSucceeded, PaymentFailed, PaymentRefunded", $tags="event")
-Rel(order, delivery, "OrderPaid", $tags="event")
-Rel(delivery, order, "ShipmentCreated, ShipmentStatusChanged, ShipmentDelivered", $tags="event")
-Rel(order, notification, "OrderStatusChanged", $tags="event")
+Rel(order, cart, "Заказ создан", $tags="event")
+Rel(order, inventory, "Статус заказа изменён", $tags="event")
+Rel(inventory, order, "Результат резервирования", $tags="event")
+Rel(order, payment, "Заказ ожидает оплаты/отменён", $tags="event")
+Rel(payment, order, "Результат оплаты", $tags="event")
+Rel(order, delivery, "Заказ оплачен", $tags="event")
+Rel(delivery, order, "Статус доставки", $tags="event")
+Rel(order, notification, "Статус заказа изменён", $tags="event")
 
 SHOW_LEGEND()
 @enduml

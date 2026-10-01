@@ -46,3 +46,31 @@
 5. Доставка публикует `ShipmentCreated` (трек-номер) и дальше статусы, вплоть до `ShipmentDelivered` → «Доставлен».
 
 Гарантия «оплатил — значит получит»: события публикуются через transactional outbox (at-least-once), подписчики обрабатывают их идемпотентно по `orderId`, а для каждого шага предусмотрены компенсирующие действия (снятие резерва, возврат).
+
+# Задание 1. Часть 2: Saga-хореография оформления заказа
+
+## Реестр событий
+
+| Этап | Тип события | Название |
+|---|---|---|
+| Заказ создан | domain | OrderCreated |
+| Товар зарезервирован | domain | StockReserved |
+| Товара не хватает | failure | StockReservationFailed |
+| Заказ ожидает оплаты | domain | OrderAwaitingPayment |
+| Оплата прошла | domain | PaymentSucceeded |
+| Оплата не прошла | failure | PaymentFailed |
+| Заказ отменён (снять резерв) | compensation | OrderCancelled |
+| Заказ оплачен | domain | OrderPaid |
+| Заявка на доставку создана | domain | ShipmentCreated |
+| Заказ доставлен | domain | ShipmentDelivered |
+| Статус заказа изменился (для уведомления) | domain | OrderStatusChanged |
+
+## Диаграммы последовательности
+
+Успешный сценарий: [diagrams/saga-happy-path.puml](diagrams/saga-happy-path.puml)
+
+![Happy path](diagrams/saga-happy-path.png)
+
+Ошибки и компенсации (нет товара / не прошла оплата): [diagrams/saga-compensation.puml](diagrams/saga-compensation.puml)
+
+![Compensation](diagrams/saga-compensation.png)
