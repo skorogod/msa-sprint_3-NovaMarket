@@ -1,0 +1,98 @@
+@startuml C2-NovaMarket-arch
+!RELATIVE_INCLUDE = "relative"
+!include ../../../templates/C4_Container.puml
+
+title C2: Событийная архитектура NovaMarket
+
+AddRelTag("event", $lineColor="#d9480f", $textColor="#d9480f", $lineStyle="DashedLine()", $legendText="асинхронное событие (через Kafka)")
+AddRelTag("sync", $lineColor="#495057", $textColor="#495057", $legendText="синхронный вызов (REST/HTTPS)")
+
+' === Пользователи ===
+Person(customer, "Покупатель", "Выбирает товары и оформляет заказы")
+Person(seller, "Продавец", "Управляет товарами и заказами")
+
+' === Внешние системы ===
+System_Ext(payment_gateway, "Платёжный шлюз", "Проводит оплату картой")
+System_Ext(logistics, "Логистический провайдер", "Доставляет заказы")
+System_Ext(push_provider, "Push/Email-провайдер", "Рассылает уведомления")
+
+System_Boundary(novamarket, "NovaMarket") {
+
+    Container(mobile_app, "Мобильное приложение", "iOS/Android", "Клиентский канал покупателя")
+    Container(seller_app, "Кабинет продавца", "Web SPA", "Клиентский канал продавца")
+    Container(gateway, "API Gateway", "NGINX", "Единая точка входа, маршрутизация запросов")
+
+    Container(auth_service, "Сервис пользователей", "Go", "Аутентификация и профили")
+
+    Boundary(selection, "Выбор товара") {
+        Container(catalog, "Сервис каталога", "Go", "Товары, поиск и наличие")
+        ContainerDb(catalog_db, "БД каталога", "PostgreSQL + Redis-кэш", "Карточки товаров и витрина")
+        Container(review, "Сервис отзывов", "Go", "Отзывы и рейтинги")
+        Container(cart, "Сервис корзины", "Go", "Корзина покупателя")
+        ContainerDb(cart_db, "БД корзины", "Redis", "Содержимое корзин")
+    }
+
+    Boundary(ordering, "Оформление и исполнение заказа") {
+        Container(order, "Сервис заказов", "Go", "Жизненный цикл заказа, координирует сагу")
+        ContainerDb(order_db, "БД заказов", "PostgreSQL", "Заказы и статусы")
+        Container(inventory, "Сервис склада", "Go", "Остатки и резервирование товаров")
+        ContainerDb(inventory_db, "БД склада", "PostgreSQL", "Остатки и резервы")
+        Container(payment, "Сервис платежей", "Go", "Оплата и возвраты")
+        ContainerDb(payment_db, "БД платежей", "PostgreSQL", "Платежи и токены карт")
+        Container(delivery, "Сервис доставки", "Go", "Заявки и статусы доставки")
+        ContainerDb(delivery_db, "БД доставки", "PostgreSQL", "Заявки и статусы доставки")
+    }
+
+    Container(notification, "Сервис уведомлений", "Go", "Push и email о статусе заказа")
+
+    ContainerQueue(broker, "Брокер событий", "Apache Kafka", "Шина асинхронных событий между сервисами")
+}
+
+' === Синхронные взаимодействия ===
+Rel(customer, mobile_app, "Использует")
+Rel(seller, seller_app, "Использует")
+Rel(mobile_app, gateway, "API-запросы", "HTTPS/JSON", $tags="sync")
+Rel(seller_app, gateway, "API-запросы", "HTTPS/JSON", $tags="sync")
+
+Rel(gateway, auth_service, "Аутентификация", "REST", $tags="sync")
+Rel(gateway, catalog, "Каталог", "REST", $tags="sync")
+Rel(gateway, review, "Отзывы", "REST", $tags="sync")
+Rel(gateway, cart, "Корзина", "REST", $tags="sync")
+Rel(gateway, order, "Заказы", "REST", $tags="sync")
+Rel(gateway, inventory, "Остатки", "REST", $tags="sync")
+Rel(gateway, payment, "Оплата", "REST", $tags="sync")
+
+Rel(catalog, catalog_db, "Читает/пишет")
+Rel(cart, cart_db, "Читает/пишет")
+Rel(order, order_db, "Читает/пишет")
+Rel(inventory, inventory_db, "Читает/пишет")
+Rel(payment, payment_db, "Читает/пишет")
+Rel(delivery, delivery_db, "Читает/пишет")
+
+Rel(payment, payment_gateway, "Оплата", "HTTPS", $tags="sync")
+Rel(payment_gateway, payment, "Результат оплаты", "Webhook", $tags="sync")
+Rel(delivery, logistics, "Заявка на доставку", "HTTPS", $tags="sync")
+Rel(logistics, delivery, "Статус доставки", "Webhook", $tags="sync")
+Rel(notification, push_provider, "Уведомление", "HTTPS", $tags="sync")
+
+' === События (Kafka) ===
+' Для наглядности стрелки идут от издателя к подписчику напрямую,
+' физически все события публикуются в топики брокера (broker).
+
+' Каталог и витрина
+Rel(catalog, cart, "Товар изменён/снят", $tags="event")
+Rel(inventory, catalog, "Остаток изменён", $tags="event")
+Rel(review, catalog, "Новый отзыв", $tags="event")
+
+' Сага оформления заказа
+Rel(order, cart, "Заказ создан", $tags="event")
+Rel(order, inventory, "Статус заказа изменён", $tags="event")
+Rel(inventory, order, "Результат резервирования", $tags="event")
+Rel(order, payment, "Заказ ожидает оплаты/отменён", $tags="event")
+Rel(payment, order, "Результат оплаты", $tags="event")
+Rel(order, delivery, "Заказ оплачен", $tags="event")
+Rel(delivery, order, "Статус доставки", $tags="event")
+Rel(order, notification, "Статус заказа изменён", $tags="event")
+
+SHOW_LEGEND()
+@enduml
