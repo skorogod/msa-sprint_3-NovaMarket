@@ -16,8 +16,8 @@ spec:
       target:
         type: Utilization
         averageUtilization: 80
-  - type: External
-    external:
+  - type: Pods
+    pods:
       metric:
         name: http_requests_per_second
       target:
