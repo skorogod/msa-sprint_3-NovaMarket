@@ -1,0 +1,19 @@
+# Оба сервиса слушают порт 8080, поэтому запускаем по одному:
+
+services:
+  rate-limiter:
+    image: nginx:1.31-alpine
+    profiles: [rate-limiter]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+
+  circuit-breaker:
+    image: nginx:1.31-alpine
+    profiles: [circuit-breaker]
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./nginx/circuit-breaker.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/njs:/etc/nginx/njs:ro

@@ -1,0 +1,39 @@
+@startuml saga-compensation
+title Saga оформления заказа — ошибки и компенсации
+
+actor Покупатель as customer
+participant "Сервис заказов" as order
+participant "Сервис склада" as inventory
+participant "Сервис платежей" as payment
+participant "Сервис уведомлений" as notification
+
+== Сценарий 1: товара не хватает на складе ==
+
+order ->> inventory: **OrderCreated**
+inventory -> inventory: товара недостаточно
+inventory ->> order: **StockReservationFailed**
+order -> order: статус ""Cancelled""
+order ->> notification: **OrderStatusChanged**
+notification -> customer: "Заказ отменён: нет в наличии"
+
+== Сценарий 2: оплата не прошла ==
+
+order ->> inventory: **OrderCreated**
+inventory ->> order: **StockReserved**
+order -> order: статус ""AwaitingPayment""
+
+order ->> payment: **OrderAwaitingPayment**
+payment -> payment: списание отклонено
+payment ->> order: **PaymentFailed**
+order -> order: статус ""Cancelled""
+
+note right of order
+  Компенсация: снимаем резерв товара
+end note
+order ->> inventory: **OrderCancelled**
+inventory -> inventory: снять резерв товара
+
+order ->> notification: **OrderStatusChanged**
+notification -> customer: "Заказ отменён: оплата не прошла"
+
+@enduml
